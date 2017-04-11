@@ -52,7 +52,8 @@
 #include <eRCaGuy_Timer2_Counter.h>
 
 #define SERIAL_SPEED 115200
-#define DEBUG               // If defined, enable Serial Monitor in the tools tab.
+#define SERIAL_DELAY 20     // If Servos attached, use small value
+// #define DEBUG               // If defined, enable Serial Monitor in the tools tab.
 
 // *****     rx INPUT     *****
 #define RX_TOTAL_CHANNELS  6
@@ -199,7 +200,6 @@ void setup() {
   // General Setup
 #ifdef DEBUG
   Serial.begin(SERIAL_SPEED);
-  delay(1000);
   Serial.println(" ");
   Serial.println("     Copyright (C) 2017 - Jim Lander (jamieFL)");  
   Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
@@ -290,7 +290,7 @@ void loop() {
   Serial.print(",  lESC: "); Serial.print(ltESCPulse);
   Serial.print("  rESC: "); Serial.println(rtESCPulse);
 
-  delay(1000);
+  delay(SERIAL_DELAY);
 #endif
 
 }
