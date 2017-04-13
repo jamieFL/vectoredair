@@ -152,7 +152,7 @@ double add(double val1, double val2) {
 
 void mixElevon(void) {
   ltAilPulse = add(rxPulse[rxAil], rxPulse[rxEle]);
-  rtAilPulse = add(reverse(rxPulse[rxAil]), rxPulse[rxEle]);
+  rtAilPulse = add(rxPulse[rxAil], reverse(rxPulse[rxEle]));
 }
 
 void mixThrottle(void) {
@@ -181,13 +181,13 @@ void mixThrottle(void) {
 #endif
 
   if (yaw_pct < 0) {  // Rudder Left
-    ltESCTmp = rxPulse[rxThr] - dwnMod;
+    ltESCTmp = reverse(rxPulse[rxThr] - dwnMod);
     ltESCPulse = constrain(ltESCTmp, 988, 2012);
     rtESCTmp = rxPulse[rxThr] + upMod;
     rtESCPulse = constrain(rtESCTmp, 988, 2012);
   }
   else {  // Rudder Right
-    ltESCTmp = rxPulse[rxThr] + upMod;
+    ltESCTmp = reverse(rxPulse[rxThr] + upMod);
     ltESCPulse = constrain(ltESCTmp, 988, 2012);
     rtESCTmp = rxPulse[rxThr] - dwnMod;
     rtESCPulse = constrain(rtESCTmp, 988, 2012);
@@ -258,7 +258,7 @@ void loop() {
     rtTVPulse = 1500;                 // Thrust Vecoting: OFF
     ltTVPulse = 1500;
     rtESCPulse = rxPulse[rxThr];      // Differential Thrust: OFF
-    ltESCPulse = rxPulse[rxThr];
+    ltESCPulse = reverse(rxPulse[rxThr]);
   }
   else if (rxPulse[rxAux1] > 1750) {  // MODE 3
     mixElevon();                      // Elevon Mixing: ON
