@@ -56,13 +56,15 @@
 
 // *****     Debug Output - If defined, enable Serial Monitor     *****
 // *****          EXPECT SERVO JITTER IN DEBUG MODE               *****
-#define DEBUG_SETUP         // Must be defined if any of the below are defined 
-#define DEBUG_RX            // Debug Output for Receiver Input
+// #define DEBUG_SETUP         // Must be defined if any of the below are defined 
+// #define DEBUG_RX            // Debug Output for Receiver Input
 // #define DEBUG_SERVO         // Debug Output for Servo Output
 // #define DEBUG_MIXING        // Debug Output for Signal Processing
 
 // *****     rx INPUT     *****
 #define RX_TOTAL_CHANNELS  6
+#define RX_ENDPOINT_HIGH 2000
+#define RX_ENDPOINT_LOW 1000
 
 #define rxThr  0
 #define rxAil  1
@@ -82,6 +84,8 @@
 #define SERVO_TOTAL_CHANNELS 6
 #define dtLowRate 0.25
 #define dtHighRate 1.0
+#define SERVO_ENDPOINT_HIGH 2000
+#define SERVO_ENDPOINT_LOW 1000
 
 #define ltAil 0
 #define ltTV  1
@@ -120,7 +124,7 @@ void calc_input(uint8_t channel, uint8_t input_pin) {
     rxPulseStart[channel] = timer2.get_count()/2;
   } else {
     uint16_t rxPulsTotal = (uint16_t)((timer2.get_count()/2) - rxPulseStart[channel]);
-    rxPulseTemp[channel] = rxPulsTotal;
+    rxPulseTemp[channel] = constrain(rxPulsTotal, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
   }
 }
 
@@ -151,14 +155,14 @@ double reverse(double val) {
 
 double add(double val1, double val2) {
   double out = (val1 - 1500 + val2 - 1500) + 1500;
-  out = (out < 1000) ? 1000 : out;
-  out = (out > 2000) ? 2000 : out;
-  return out;
+  return constrain(out, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
 }
 
 void mixElevon(void) {
-  ltAilPulse = add(rxPulse[rxAil], rxPulse[rxEle]);
-  rtAilPulse = add(rxPulse[rxAil], reverse(rxPulse[rxEle]));
+  double tmpval = add(rxPulse[rxAil], rxPulse[rxEle]);
+  ltAilPulse = constrain(tmpval, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
+  tmpval = add(rxPulse[rxAil], reverse(rxPulse[rxEle]));  
+  rtAilPulse = constrain(tmpval, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
 }
 
 void mixThrottle(void) {
@@ -182,20 +186,21 @@ void mixThrottle(void) {
   Serial.print("  yawP: "); Serial.print(yaw_pct);
   Serial.print("  thrP: "); Serial.print(thr_pct);  
   Serial.print("  uMod: "); Serial.print(upMod);
-  Serial.print("  dMod: "); Serial.println(dwnMod);
+  Serial.print("  dMod: "); Serial.print(dwnMod);
+  Serial.print("  |  ");  
 #endif
 
   if (yaw_pct < 0) {  // Rudder Left
     ltESCTmp = reverse(rxPulse[rxThr] - dwnMod);
-    ltESCPulse = constrain(ltESCTmp, 988, 2012);
+    ltESCPulse = constrain(ltESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
     rtESCTmp = rxPulse[rxThr] + upMod;
-    rtESCPulse = constrain(rtESCTmp, 988, 2012);
+    rtESCPulse = constrain(rtESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
   }
   else {  // Rudder Right
     ltESCTmp = reverse(rxPulse[rxThr] + upMod);
-    ltESCPulse = constrain(ltESCTmp, 988, 2012);
+    ltESCPulse = constrain(ltESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
     rtESCTmp = rxPulse[rxThr] - dwnMod;
-    rtESCPulse = constrain(rtESCTmp, 988, 2012);
+    rtESCPulse = constrain(rtESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
   }
 }
 
@@ -253,7 +258,8 @@ void loop() {
   Serial.print("  Ele:  "); Serial.print(rxPulse[rxEle]);
   Serial.print("  Rud:  "); Serial.print(rxPulse[rxRud]);
   Serial.print("  Aux1: "); Serial.print(rxPulse[rxAux1]);
-  Serial.print("  Aux2: "); Serial.println(rxPulse[rxAux2]);
+  Serial.print("  Aux2: "); Serial.print(rxPulse[rxAux2]);
+  Serial.print("  |  ");
 #endif  
 
   // Perform Elevon, Thust Vectoring, and Differential Thrust Mixing
@@ -292,8 +298,11 @@ void loop() {
   Serial.print("  ltTV: "); Serial.print(ltTVPulse);
   Serial.print("  rtTV: "); Serial.print(rtTVPulse);
   Serial.print("  lESC: "); Serial.print(ltESCPulse);
-  Serial.print("  rESC: "); Serial.println(rtESCPulse);
+  Serial.print("  rESC: "); Serial.print(rtESCPulse);
+#endif  
 
+#ifdef DEBUG_SETUP
+  Serial.println("");
   delay(SERIAL_DELAY);
 #endif
 
