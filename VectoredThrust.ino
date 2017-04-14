@@ -52,8 +52,14 @@
 #include <eRCaGuy_Timer2_Counter.h>
 
 #define SERIAL_SPEED 115200
-#define SERIAL_DELAY 20     // If Servos attached, use small value
-// #define DEBUG               // If defined, enable Serial Monitor in the tools tab.
+#define SERIAL_DELAY 200     // If Servos attached, use small value
+
+// *****     Debug Output - If defined, enable Serial Monitor     *****
+// *****          EXPECT SERVO JITTER IN DEBUG MODE               *****
+#define DEBUG_SETUP         // Must be defined if any of the below are defined 
+#define DEBUG_RX            // Debug Output for Receiver Input
+// #define DEBUG_SERVO         // Debug Output for Servo Output
+// #define DEBUG_MIXING        // Debug Output for Signal Processing
 
 // *****     rx INPUT     *****
 #define RX_TOTAL_CHANNELS  6
@@ -171,13 +177,12 @@ void mixThrottle(void) {
   dwnMod  = abs(yaw_pct) * (rxPulse[rxThr] - 1000) * DTRate;  // Calculate Rudder Pulse Size Constrained by Amount of Throttle
   upMod   = dwnMod * float(1-thr_pct);                        // Up Modifier has less of an effect as throttle increases.
 
-#ifdef DEBUG
-  Serial.print("rate: "); Serial.print(DTRate);
+#ifdef DEBUG_MIXING
+  Serial.print("MIXING   - rate: "); Serial.print(DTRate);
   Serial.print("  yawP: "); Serial.print(yaw_pct);
   Serial.print("  thrP: "); Serial.print(thr_pct);  
   Serial.print("  uMod: "); Serial.print(upMod);
-  Serial.print("  dMod: "); Serial.print(dwnMod);  
-  Serial.print("   |  ");
+  Serial.print("  dMod: "); Serial.println(dwnMod);
 #endif
 
   if (yaw_pct < 0) {  // Rudder Left
@@ -198,7 +203,7 @@ void mixThrottle(void) {
 // SETUP
 void setup() {
   // General Setup
-#ifdef DEBUG
+#ifdef DEBUG_SETUP
   Serial.begin(SERIAL_SPEED);
   Serial.println(" ");
   Serial.println("     Copyright (C) 2017 - Jim Lander (jamieFL)");  
@@ -242,14 +247,13 @@ void loop() {
 
   rxReadPulse();  // get current rx INPUTS
 
-#ifdef DEBUG
-  Serial.print(" Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
-  Serial.print("  Ail: "); Serial.print(rxPulse[rxAil]);
-  Serial.print("  Ele: "); Serial.print(rxPulse[rxEle]);
-  Serial.print("  Rud: "); Serial.print(rxPulse[rxRud]);
+#ifdef DEBUG_RX
+  Serial.print("RECEIVER - Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
+  Serial.print("  Ail:  "); Serial.print(rxPulse[rxAil]);
+  Serial.print("  Ele:  "); Serial.print(rxPulse[rxEle]);
+  Serial.print("  Rud:  "); Serial.print(rxPulse[rxRud]);
   Serial.print("  Aux1: "); Serial.print(rxPulse[rxAux1]);
-  Serial.print("  Aux2: "); Serial.print(rxPulse[rxAux2]);
-  Serial.print("   | ");
+  Serial.print("  Aux2: "); Serial.println(rxPulse[rxAux2]);
 #endif  
 
   // Perform Elevon, Thust Vectoring, and Differential Thrust Mixing
@@ -282,12 +286,12 @@ void loop() {
   ServoArray[rtTV].writeMicroseconds(rtTVPulse);
   ServoArray[rtAil].writeMicroseconds(rtAilPulse);
 
-#ifdef DEBUG
-  Serial.print("  ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
+#ifdef DEBUG_SERVO
+  Serial.print("SERVOS   - ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
   Serial.print("  rtAl: "); Serial.print(rtAilPulse);
-  Serial.print(",  ltTV: "); Serial.print(ltTVPulse);
+  Serial.print("  ltTV: "); Serial.print(ltTVPulse);
   Serial.print("  rtTV: "); Serial.print(rtTVPulse);
-  Serial.print(",  lESC: "); Serial.print(ltESCPulse);
+  Serial.print("  lESC: "); Serial.print(ltESCPulse);
   Serial.print("  rESC: "); Serial.println(rtESCPulse);
 
   delay(SERIAL_DELAY);
