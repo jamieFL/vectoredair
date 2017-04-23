@@ -5,23 +5,22 @@
     Thrust (DT), and Thrust Vectoring (TV) mixing.
 
    RECEIVER INPUTS
-   Pin 2, Channel 1, Throttle
-   Pin 3, Channel 2, Aileron
-   Pin 4, Channel 3, Elevator
-   Pin 5, Channel 4, Rudder
-   Pin 6, Channel 5, Auxilary Channle 1 - Mode Switch
+   Pin 8, Channel 1, Throttle
+   Pin 9, Channel 2, Aileron
+   Pin 10, Channel 3, Elevator
+   Pin 11 Channel 4, Rudder
+   Pin 12, Channel 5, Auxilary Channle 1 - Mode Switch
                      Mode 1, PWM < 1250, TV Off, DT @ 15%
                      Mode 2, PWM ~1500, TV On, DT @ 15%
                      Mode 3, PWM > 1750, TV On, DT 100%
-   Pin 7, Channel 6, Auxilary Channel 2 - RESERVED
 
    SERVO & ESC OUTPUTS
-   Pin 8,  Left Aileron Servo
-   Pin 9,  Left Thrust Vectoring Servo
-   Pin 10, Left Electronic Speed Controller (ESC)
-   Pin 11, Right Electonic Speed Controller (ESC)
-   Pin 12, Right Thrust Vectoring Servo
-   PIN 13, Right Aileron Servo
+   Pin 2,  Left Aileron Servo
+   Pin 3,  Left Thrust Vectoring Servo
+   Pin 4, Left Electronic Speed Controller (ESC)
+   Pin 5, Right Electonic Speed Controller (ESC)
+   Pin 6, Right Thrust Vectoring Servo
+   PIN 7, Right Aileron Servo
 
    INCLUDED LIBRARIES
    Enable Interrupt        http://tiny.cc/EnableInterrupt
@@ -52,7 +51,7 @@
 #include <eRCaGuy_Timer2_Counter.h>
 
 #define SERIAL_SPEED 115200
-#define SERIAL_DELAY 200     // If Servos attached, use small value
+#define LOOP_DELAY 2000     // If Servos attached, use small value
 
 // *****     Debug Output - If defined, enable Serial Monitor     *****
 // *****          EXPECT SERVO JITTER IN DEBUG MODE               *****
@@ -62,7 +61,7 @@
 // #define DEBUG_MIXING        // Debug Output for Signal Processing
 
 // *****     rx INPUT     *****
-#define RX_TOTAL_CHANNELS  6
+#define RX_TOTAL_CHANNELS  5
 #define RX_ENDPOINT_HIGH 2000
 #define RX_ENDPOINT_LOW 1000
 
@@ -70,15 +69,13 @@
 #define rxAil  1
 #define rxEle  2
 #define rxRud  3
-#define rxAux1 4
-#define rxAux2 5
+#define rxAux 4
 
-#define rxThr_PIN  2
-#define rxAil_PIN  3
-#define rxEle_PIN  4
-#define rxRud_PIN  5
-#define rxAux1_PIN 6
-#define rxAux2_PIN 7
+#define rxThr_PIN  8
+#define rxAil_PIN  9
+#define rxEle_PIN  10
+#define rxRud_PIN  11
+#define rxAux_PIN 12
 
 // *****     rx Servo Output     *****
 #define SERVO_TOTAL_CHANNELS 6
@@ -94,12 +91,12 @@
 #define rtTV  4
 #define rtAil 5
 
-#define ltAil_PIN  8
-#define ltTV_PIN   9
-#define ltESC_PIN 10
-#define rtESC_PIN 11
-#define rtTV_PIN  12
-#define rtAil_PIN 13
+#define ltAil_PIN  2
+#define ltTV_PIN   3
+#define ltESC_PIN  4
+#define rtESC_PIN  5
+#define rtTV_PIN   6
+#define rtAil_PIN  7
 
 // *****     rx INPUT     *****
 uint16_t rxPulse[RX_TOTAL_CHANNELS];
@@ -140,11 +137,8 @@ void calc_Ele()  {
 void calc_Rud()  {
   calc_input(rxRud, rxRud_PIN);
 }
-void calc_Aux1() {
-  calc_input(rxAux1, rxAux1_PIN);
-}
-void calc_Aux2() {
-  calc_input(rxAux2, rxAux2_PIN);
+void calc_Aux() {
+  calc_input(rxAux, rxAux_PIN);
 }
 
 
@@ -172,23 +166,14 @@ void mixThrottle(void) {
 
   yaw_pct = ((float)rxPulse[rxRud] - 1500) / (float)500;    // Value Between -1 and 1: 0 for Center, -1 full left, 1 full right
   thr_pct = ((float)rxPulse[rxThr] - 1000) / (float)1000;     // Value Between 0 and 1: .5 for Mid Throttle
-
+  
   if (yaw_pct < (float)-1.0) { yaw_pct = (float)-1.0; }       // Constrain values between -1.0 and 1.0
     else if (yaw_pct > (float)1.0) { yaw_pct = (float)1.0; }
   if (thr_pct < (float)0.0) { yaw_pct = (float)0.0; }         // Constrain values between 0.0 and 1.0
     else if (thr_pct > (float)1.0) { thr_pct = (float)1.0; }  
-  
+
   dwnMod  = abs(yaw_pct) * (rxPulse[rxThr] - 1000) * DTRate;  // Calculate Rudder Pulse Size Constrained by Amount of Throttle
   upMod   = dwnMod * float(1-thr_pct);                        // Up Modifier has less of an effect as throttle increases.
-
-#ifdef DEBUG_MIXING
-  Serial.print("MIXING   - rate: "); Serial.print(DTRate);
-  Serial.print("  yawP: "); Serial.print(yaw_pct);
-  Serial.print("  thrP: "); Serial.print(thr_pct);  
-  Serial.print("  uMod: "); Serial.print(upMod);
-  Serial.print("  dMod: "); Serial.print(dwnMod);
-  Serial.print("  |  ");  
-#endif
 
   if (yaw_pct < 0) {  // Rudder Left
     ltESCTmp = reverse(rxPulse[rxThr] - dwnMod);
@@ -202,6 +187,14 @@ void mixThrottle(void) {
     rtESCTmp = rxPulse[rxThr] - dwnMod;
     rtESCPulse = constrain(rtESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
   }
+
+#ifdef DEBUG_MIXING
+  Serial.print("  MIXING   - rate: "); Serial.print(DTRate);
+  Serial.print("  yawP: "); Serial.print(yaw_pct);
+  Serial.print("  thrP: "); Serial.print(thr_pct);  
+  Serial.print("  uMod: "); Serial.print(upMod);
+  Serial.print("  dMod: "); Serial.print(dwnMod);
+#endif  
 }
 
 
@@ -215,27 +208,28 @@ void setup() {
   Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
   Serial.println("     it under the terms of the GNU General Public License.  For details, see http://www.gnu.org/licenses/");
   Serial.println(" ");
-  delay(2000);
+  unsigned long temp_time = timer2.get_count();
+  while((timer2.get_count() - temp_time)/1000 < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
 #endif
 
   timer2.setup(); //this MUST be done before the other Timer2_Counter functions work; Note: since this messes up PWM outputs on pins 3 & 11, as well as 
                   //interferes with the tone() library (http://arduino.cc/en/reference/tone), you can always revert Timer2 back to normal by calling 
                   //timer2.unsetup()
 
+  TIMSK0 &= ~_BV(TOIE0);    // disable timer0 overflow interrupt - NEEDED to reduce servo jitter
+
   //rx INPUTS
   pinMode(rxThr_PIN, INPUT);
   pinMode(rxAil_PIN, INPUT);
   pinMode(rxEle_PIN, INPUT);
   pinMode(rxRud_PIN, INPUT);
-  pinMode(rxAux1_PIN, INPUT);
-  pinMode(rxAux2_PIN, INPUT);
+  pinMode(rxAux_PIN, INPUT);
 
   enableInterrupt(rxThr_PIN, calc_Thr, CHANGE);
   enableInterrupt(rxAil_PIN, calc_Ail, CHANGE);
   enableInterrupt(rxEle_PIN, calc_Ele, CHANGE);
   enableInterrupt(rxRud_PIN, calc_Rud, CHANGE);
-  enableInterrupt(rxAux1_PIN, calc_Aux1, CHANGE);
-  enableInterrupt(rxAux2_PIN, calc_Aux2, CHANGE);
+  enableInterrupt(rxAux_PIN, calc_Aux, CHANGE);
 
   // Servo OUTPUT
   ServoArray[ltAil].attach(ltAil_PIN, 900, 2100); //  Left Elevon
@@ -253,24 +247,22 @@ void loop() {
   rxReadPulse();  // get current rx INPUTS
 
 #ifdef DEBUG_RX
-  Serial.print("RECEIVER - Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
+  Serial.print("  RECEIVER - Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
   Serial.print("  Ail:  "); Serial.print(rxPulse[rxAil]);
   Serial.print("  Ele:  "); Serial.print(rxPulse[rxEle]);
   Serial.print("  Rud:  "); Serial.print(rxPulse[rxRud]);
-  Serial.print("  Aux1: "); Serial.print(rxPulse[rxAux1]);
-  Serial.print("  Aux2: "); Serial.print(rxPulse[rxAux2]);
-  Serial.print("  |  ");
+  Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
 #endif  
 
   // Perform Elevon, Thust Vectoring, and Differential Thrust Mixing
-  if (rxPulse[rxAux1] < 1250) {       // MODE 1
+  if (rxPulse[rxAux] < 1250) {       // MODE 1
     mixElevon();                      // Elevon Mixing: ON
     rtTVPulse = 1500;                 // Thrust Vecoting: OFF
     ltTVPulse = 1500;
     rtESCPulse = rxPulse[rxThr];      // Differential Thrust: OFF
     ltESCPulse = reverse(rxPulse[rxThr]);
   }
-  else if (rxPulse[rxAux1] > 1750) {  // MODE 3
+  else if (rxPulse[rxAux] > 1750) {  // MODE 3
     mixElevon();                      // Elevon Mixing: ON
     rtTVPulse = rtAilPulse;           // Thrust Vectoring: ON
     ltTVPulse = ltAilPulse;
@@ -293,7 +285,7 @@ void loop() {
   ServoArray[rtAil].writeMicroseconds(rtAilPulse);
 
 #ifdef DEBUG_SERVO
-  Serial.print("SERVOS   - ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
+  Serial.print("  SERVOS   - ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
   Serial.print("  rtAl: "); Serial.print(rtAilPulse);
   Serial.print("  ltTV: "); Serial.print(ltTVPulse);
   Serial.print("  rtTV: "); Serial.print(rtTVPulse);
@@ -303,7 +295,8 @@ void loop() {
 
 #ifdef DEBUG_SETUP
   Serial.println("");
-  delay(SERIAL_DELAY);
+  unsigned long temp_time = timer2.get_count();
+  while((timer2.get_count() - temp_time)/1000 < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
 #endif
 
 }
