@@ -1,31 +1,23 @@
 /**************************************************************************
-    This sketch is is designed for the Arduino Uno or Nano.  The Nano will 
-    be installed between an FrSky S6r stabilized receiver, and a flying 
-    wing's servos and ESCs. Its purpos is to perform Elevon, Differential 
-    Thrust (DT), and Thrust Vectoring (TV) mixing.
 
    RECEIVER INPUTS
-   Pin 8, Channel 1, Throttle
-   Pin 9, Channel 2, Aileron
-   Pin 10, Channel 3, Elevator
-   Pin 11 Channel 4, Rudder
-   Pin 12, Channel 5, Auxilary Channle 1 - Mode Switch
-                     Mode 1, PWM < 1250, TV Off, DT @ 15%
-                     Mode 2, PWM ~1500, TV On, DT @ 15%
-                     Mode 3, PWM > 1750, TV On, DT 100%
+   Pin  8, PCINT0, Channel 1, Throttle
+   Pin  9, PCINT1, Channel 2, Aileron
+   Pin 10, PCINT2, Channel 3, Elevator
+   Pin 11, PCINT3, Channel 4, Rudder
+   Pin 12, PCINT4, Channel 5, Aux Channel
 
    SERVO & ESC OUTPUTS
-   Pin 2,  Left Aileron Servo
-   Pin 3,  Left Thrust Vectoring Servo
+   Pin 2, Left Aileron Servo
+   Pin 3, Left Thrust Vectoring Servo
    Pin 4, Left Electronic Speed Controller (ESC)
    Pin 5, Right Electonic Speed Controller (ESC)
    Pin 6, Right Thrust Vectoring Servo
-   PIN 7, Right Aileron Servo
+   PIN 7, Right Aileron Servo   
+
 
    INCLUDED LIBRARIES
-   Enable Interrupt        http://tiny.cc/EnableInterrupt
    eRCaGuy_Timer2_Counter  http://tiny.cc/eRCaGuy_Timer2_Counter
-   Servos                  http://tiny.cc/arduino-servo
 
 ***************************************************************************
 
@@ -46,43 +38,37 @@
 
 **************************************************************************/
 
-#include <EnableInterrupt.h>
+// *****  Included Libraries  *****
 #include <Servo.h>
 #include <eRCaGuy_Timer2_Counter.h>
 
-#define SERIAL_SPEED 115200
-#define LOOP_DELAY 2000     // If Servos attached, use small value
+// *****  Constants  *****
+#define SERIAL_SPEED 9600
+#define SERIAL_DELAY 200
 
-// *****     Debug Output - If defined, enable Serial Monitor     *****
-// *****          EXPECT SERVO JITTER IN DEBUG MODE               *****
-// #define DEBUG_SETUP         // Must be defined if any of the below are defined 
-// #define DEBUG_RX            // Debug Output for Receiver Input
-// #define DEBUG_SERVO         // Debug Output for Servo Output
-// #define DEBUG_MIXING        // Debug Output for Signal Processing
-
-// *****     rx INPUT     *****
+// Receiver Input
 #define RX_TOTAL_CHANNELS  5
-#define RX_ENDPOINT_HIGH 2000
-#define RX_ENDPOINT_LOW 1000
+#define RX_ENDPOINT_HIGH 2020
+#define RX_ENDPOINT_LOW 980
 
 #define rxThr  0
 #define rxAil  1
 #define rxEle  2
 #define rxRud  3
-#define rxAux 4
+#define rxAux  4
 
 #define rxThr_PIN  8
 #define rxAil_PIN  9
 #define rxEle_PIN  10
 #define rxRud_PIN  11
-#define rxAux_PIN 12
+#define rxAux_PIN  12
 
-// *****     rx Servo Output     *****
-#define SERVO_TOTAL_CHANNELS 6
+// Channel Mixing
 #define dtLowRate 0.25
 #define dtHighRate 1.0
-#define SERVO_ENDPOINT_HIGH 2000
-#define SERVO_ENDPOINT_LOW 1000
+
+// Servo Output
+#define SERVO_TOTAL_CHANNELS 6
 
 #define ltAil 0
 #define ltTV  1
@@ -91,58 +77,28 @@
 #define rtTV  4
 #define rtAil 5
 
-#define ltAil_PIN  2
-#define ltTV_PIN   3
-#define ltESC_PIN  4
-#define rtESC_PIN  5
-#define rtTV_PIN   6
-#define rtAil_PIN  7
+#define ltAil_PIN 2
+#define ltTV_PIN  3
+#define ltESC_PIN 4
+#define rtESC_PIN 5
+#define rtTV_PIN  6
+#define rtAil_PIN 7
 
-// *****     rx INPUT     *****
-uint16_t rxPulse[RX_TOTAL_CHANNELS];
-uint64_t rxPulseStart[RX_TOTAL_CHANNELS];
-volatile uint16_t rxPulseTemp[RX_TOTAL_CHANNELS];
+// *****  Variables  *****
+// Receiver Input
+byte rxLast[RX_TOTAL_CHANNELS];             // Receiver Input Interrupt - Last Interrupt State
+unsigned long rxTimer[RX_TOTAL_CHANNELS];   // Receiver Input Interrupt - micros when pulse went high
+int rxPulse[RX_TOTAL_CHANNELS];             // Current Receiver Pulse
 
-// *****     rx Servo Output     *****
+// Servo Output
 volatile uint32_t ltAilPulse, ltTVPulse, ltESCPulse, rtESCPulse, rtTVPulse, rtAilPulse;
+unsigned long ltAilTime, ltTVTime, ltESCTime, rtESCTime, rtTVTime, rtAilTime;
 volatile float DTRate;
+unsigned long zero_timer, pulse_loop_timer;
 
 Servo ServoArray[SERVO_TOTAL_CHANNELS];
 
-// *****     rx INPUTS     *****
-void rxReadPulse() {
-  noInterrupts();
-  memcpy(rxPulse, (const void *)rxPulseTemp, sizeof(rxPulseTemp));
-  interrupts();
-}
-
-void calc_input(uint8_t channel, uint8_t input_pin) {
-  if (digitalRead(input_pin) == HIGH) {
-    rxPulseStart[channel] = timer2.get_count()/2;
-  } else {
-    uint16_t rxPulsTotal = (uint16_t)((timer2.get_count()/2) - rxPulseStart[channel]);
-    rxPulseTemp[channel] = constrain(rxPulsTotal, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
-  }
-}
-
-void calc_Thr()  {
-  calc_input(rxThr, rxThr_PIN);
-}
-void calc_Ail()  {
-  calc_input(rxAil, rxAil_PIN);
-}
-void calc_Ele()  {
-  calc_input(rxEle, rxEle_PIN);
-}
-void calc_Rud()  {
-  calc_input(rxRud, rxRud_PIN);
-}
-void calc_Aux() {
-  calc_input(rxAux, rxAux_PIN);
-}
-
-
-// *****     rx Servo Output     *****
+// *****     Channel Mixing     *****
 double reverse(double val) {
   return (val - 1500) * -1 + 1500;
 }
@@ -177,59 +133,37 @@ void mixThrottle(void) {
 
   if (yaw_pct < 0) {  // Rudder Left
     ltESCTmp = reverse(rxPulse[rxThr] - dwnMod);
-    ltESCPulse = constrain(ltESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
+    ltESCPulse = constrain(ltESCTmp, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
     rtESCTmp = rxPulse[rxThr] + upMod;
-    rtESCPulse = constrain(rtESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
+    rtESCPulse = constrain(rtESCTmp, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
   }
   else {  // Rudder Right
     ltESCTmp = reverse(rxPulse[rxThr] + upMod);
-    ltESCPulse = constrain(ltESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
+    ltESCPulse = constrain(ltESCTmp, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
     rtESCTmp = rxPulse[rxThr] - dwnMod;
-    rtESCPulse = constrain(rtESCTmp, SERVO_ENDPOINT_LOW, SERVO_ENDPOINT_HIGH);
+    rtESCPulse = constrain(rtESCTmp, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
   }
-
-#ifdef DEBUG_MIXING
-  Serial.print("  MIXING   - rate: "); Serial.print(DTRate);
-  Serial.print("  yawP: "); Serial.print(yaw_pct);
-  Serial.print("  thrP: "); Serial.print(thr_pct);  
-  Serial.print("  uMod: "); Serial.print(upMod);
-  Serial.print("  dMod: "); Serial.print(dwnMod);
-#endif  
 }
 
+//  *****     Setup Routine     *****
+void setup(){
 
-// SETUP
-void setup() {
-  // General Setup
-#ifdef DEBUG_SETUP
   Serial.begin(SERIAL_SPEED);
-  Serial.println(" ");
-  Serial.println("     Copyright (C) 2017 - Jim Lander (jamieFL)");  
-  Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
-  Serial.println("     it under the terms of the GNU General Public License.  For details, see http://www.gnu.org/licenses/");
-  Serial.println(" ");
-  unsigned long temp_time = timer2.get_count();
-  while((timer2.get_count() - temp_time)/1000 < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
-#endif
 
-  timer2.setup(); //this MUST be done before the other Timer2_Counter functions work; Note: since this messes up PWM outputs on pins 3 & 11, as well as 
-                  //interferes with the tone() library (http://arduino.cc/en/reference/tone), you can always revert Timer2 back to normal by calling 
-                  //timer2.unsetup()
+  timer2.setup();           // Initialize Timer2_Counter; Note: since this messes up PWM outputs on 
+                            // pins 3 & 11, as well as interferes with the tone() library, you can 
+                            // always revert Timer2 back to normal by calling timer2.unsetup()
+
+  
+  // rx INPUT - Setup Interrupts on Pins 8-12
+  PCICR  |= (1 << PCIE0);   // set PCIE0 to enable PCMSK0 scan
+  PCMSK0 |= (1 << PCINT0);
+  PCMSK0 |= (1 << PCINT1);
+  PCMSK0 |= (1 << PCINT2);
+  PCMSK0 |= (1 << PCINT3);
+  PCMSK0 |= (1 << PCINT4);  
 
   TIMSK0 &= ~_BV(TOIE0);    // disable timer0 overflow interrupt - NEEDED to reduce servo jitter
-
-  //rx INPUTS
-  pinMode(rxThr_PIN, INPUT);
-  pinMode(rxAil_PIN, INPUT);
-  pinMode(rxEle_PIN, INPUT);
-  pinMode(rxRud_PIN, INPUT);
-  pinMode(rxAux_PIN, INPUT);
-
-  enableInterrupt(rxThr_PIN, calc_Thr, CHANGE);
-  enableInterrupt(rxAil_PIN, calc_Ail, CHANGE);
-  enableInterrupt(rxEle_PIN, calc_Ele, CHANGE);
-  enableInterrupt(rxRud_PIN, calc_Rud, CHANGE);
-  enableInterrupt(rxAux_PIN, calc_Aux, CHANGE);
 
   // Servo OUTPUT
   ServoArray[ltAil].attach(ltAil_PIN, 900, 2100); //  Left Elevon
@@ -237,32 +171,21 @@ void setup() {
   ServoArray[ltESC].attach(ltESC_PIN, 900, 2100); //  Left ESC
   ServoArray[rtESC].attach(rtESC_PIN, 900, 2100); //  Right ESC
   ServoArray[rtTV].attach (rtTV_PIN, 900, 2100);  //  Right Thrust Vector Servo
-  ServoArray[rtAil].attach(rtAil_PIN, 900, 2100); //  Right Elevon
+  ServoArray[rtAil].attach(rtAil_PIN, 900, 2100); //  Right Elevon  
+
 }
 
+//  *****     Main Loop     *****
+void loop(){
 
-// LOOP
-void loop() {
-
-  rxReadPulse();  // get current rx INPUTS
-
-#ifdef DEBUG_RX
-  Serial.print("  RECEIVER - Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
-  Serial.print("  Ail:  "); Serial.print(rxPulse[rxAil]);
-  Serial.print("  Ele:  "); Serial.print(rxPulse[rxEle]);
-  Serial.print("  Rud:  "); Serial.print(rxPulse[rxRud]);
-  Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
-#endif  
-
-  // Perform Elevon, Thust Vectoring, and Differential Thrust Mixing
-  if (rxPulse[rxAux] < 1250) {       // MODE 1
+if (rxPulse[rxAux] < 1250) {          // MODE 1
     mixElevon();                      // Elevon Mixing: ON
     rtTVPulse = 1500;                 // Thrust Vecoting: OFF
     ltTVPulse = 1500;
     rtESCPulse = rxPulse[rxThr];      // Differential Thrust: OFF
     ltESCPulse = reverse(rxPulse[rxThr]);
   }
-  else if (rxPulse[rxAux] > 1750) {  // MODE 3
+  else if (rxPulse[rxAux] > 1750) {   // MODE 3
     mixElevon();                      // Elevon Mixing: ON
     rtTVPulse = rtAilPulse;           // Thrust Vectoring: ON
     ltTVPulse = ltAilPulse;
@@ -284,19 +207,53 @@ void loop() {
   ServoArray[rtTV].writeMicroseconds(rtTVPulse);
   ServoArray[rtAil].writeMicroseconds(rtAilPulse);
 
-#ifdef DEBUG_SERVO
-  Serial.print("  SERVOS   - ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
-  Serial.print("  rtAl: "); Serial.print(rtAilPulse);
-  Serial.print("  ltTV: "); Serial.print(ltTVPulse);
-  Serial.print("  rtTV: "); Serial.print(rtTVPulse);
-  Serial.print("  lESC: "); Serial.print(ltESCPulse);
-  Serial.print("  rESC: "); Serial.print(rtESCPulse);
-#endif  
+}
 
-#ifdef DEBUG_SETUP
-  Serial.println("");
-  unsigned long temp_time = timer2.get_count();
-  while((timer2.get_count() - temp_time)/1000 < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
-#endif
-
+//Interrupt routines called when Receiver Input Pins change state
+ISR(PCINT0_vect){
+  // Throttle Interrupt
+  if(rxLast[rxThr] == 0 && PINB & B00000001 ){
+    rxLast[rxThr] = 1;
+    rxTimer[rxThr] = timer2.get_count()/2;
+  }
+  else if(rxLast[rxThr] == 1 && !(PINB & B00000001)){
+    rxLast[rxThr] = 0;
+    rxPulse[rxThr] = timer2.get_count()/2 - rxTimer[rxThr];
+  }
+  // Aileron Interrupt
+  if(rxLast[rxAil] == 0 && PINB & B00000010 ){
+    rxLast[rxAil] = 1;
+    rxTimer[rxAil] = timer2.get_count()/2;
+  }
+  else if(rxLast[rxAil] == 1 && !(PINB & B00000010)){
+    rxLast[rxAil] = 0;
+    rxPulse[rxAil] = timer2.get_count()/2 - rxTimer[rxAil];
+  }
+  // Elevator Interrupt
+  if(rxLast[rxEle] == 0 && PINB & B00000100 ){
+    rxLast[rxEle] = 1;
+    rxTimer[rxEle] = timer2.get_count()/2;
+  }
+  else if(rxLast[rxEle] == 1 && !(PINB & B00000100)){
+    rxLast[rxEle] = 0;
+    rxPulse[rxEle] = timer2.get_count()/2 - rxTimer[rxEle];
+  }
+  // Rudder Interrupt
+  if(rxLast[rxRud] == 0 && PINB & B00001000 ){
+    rxLast[rxRud] = 1;
+    rxTimer[rxRud] = timer2.get_count()/2;
+  }
+  else if(rxLast[rxRud] == 1 && !(PINB & B00001000)){
+    rxLast[rxRud] = 0;
+    rxPulse[rxRud] = timer2.get_count()/2 - rxTimer[rxRud];
+  }  
+  // Aux Channel Interrupt
+  if(rxLast[rxAux] == 0 && PINB & B00010000 ){
+    rxLast[rxAux] = 1;
+    rxTimer[rxAux] = timer2.get_count()/2;
+  }
+  else if(rxLast[rxAux] == 1 && !(PINB & B00010000)){
+    rxLast[rxAux] = 0;
+    rxPulse[rxAux] = timer2.get_count()/2 - rxTimer[rxAux];
+  }    
 }
