@@ -6,19 +6,19 @@
     Thrust (DT), and Thrust Vectoring (TV) mixing.
     
 # RECEIVER INPUTS
-   Pin  8, PCINT0, Channel 1, Throttle</ BR>
-   Pin  9, PCINT1, Channel 2, Aileron</ BR>
-   Pin 10, PCINT2, Channel 3, Elevator</ BR>
-   Pin 11, PCINT3, Channel 4, Rudder</ BR>
-   Pin 12, PCINT4, Channel 5, Aux Channel</ BR>
+   Pin  8, PCINT0, Channel 1, Throttle<BR />
+   Pin  9, PCINT1, Channel 2, Aileron<BR />
+   Pin 10, PCINT2, Channel 3, Elevator<BR />
+   Pin 11, PCINT3, Channel 4, Rudder<BR />
+   Pin 12, PCINT4, Channel 5, Aux Channel<BR />
    
 # SERVO & ESC OUTPUTS
-   Pin 2, Left Aileron Servo</ br>
-   Pin 3, Left Thrust Vectoring Servo</ br>
-   Pin 4, Left Electronic Speed Controller (ESC)</ br>
-   Pin 5, Right Electonic Speed Controller (ESC)</ br>
-   Pin 6, Right Thrust Vectoring Servo</ br>
-   PIN 7, Right Aileron Servo  </ br>
+   Pin 2, Left Aileron Servo<BR />
+   Pin 3, Left Thrust Vectoring Servo<BR /r>
+   Pin 4, Left Electronic Speed Controller (ESC)<BR />
+   Pin 5, Right Electonic Speed Controller (ESC)<BR />
+   Pin 6, Right Thrust Vectoring Servo<BR />
+   PIN 7, Right Aileron Servo  <BR />
    
 # INCLUDED LIBRARIES
 Enable Interrupt        http://tiny.cc/EnableInterrupt<BR />
