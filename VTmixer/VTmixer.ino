@@ -43,8 +43,15 @@
 #include <eRCaGuy_Timer2_Counter.h>
 
 // *****  Constants  *****
-#define SERIAL_SPEED 9600
-#define SERIAL_DELAY 200
+#define SERIAL_SPEED 115200
+#define LOOP_DELAY 20     // If Servos attached, use small value
+
+// *****     Debug Output - If defined, enable Serial Monitor     *****
+// *****          EXPECT SERVO JITTER IN DEBUG MODE               *****
+ #define DEBUG_SETUP         // Must be defined if any of the below are defined 
+ #define DEBUG_RX            // Debug Output for Receiver Input
+ #define DEBUG_SERVO         // Debug Output for Servo Output
+// #define DEBUG_MIXING        // Debug Output for Signal Processing
 
 // Receiver Input
 #define RX_TOTAL_CHANNELS  5
@@ -143,16 +150,33 @@ void mixThrottle(void) {
     rtESCTmp = rxPulse[rxThr] - dwnMod;
     rtESCPulse = constrain(rtESCTmp, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
   }
+
+#ifdef DEBUG_MIXING
+  Serial.print("  MIXING   - rate: "); Serial.print(DTRate);
+  Serial.print("  yawP: "); Serial.print(yaw_pct);
+  Serial.print("  thrP: "); Serial.print(thr_pct);  
+  Serial.print("  uMod: "); Serial.print(upMod);
+  Serial.print("  dMod: "); Serial.print(dwnMod);
+#endif   
 }
 
 //  *****     Setup Routine     *****
 void setup(){
 
-  Serial.begin(SERIAL_SPEED);
-
   timer2.setup();           // Initialize Timer2_Counter; Note: since this messes up PWM outputs on 
                             // pins 3 & 11, as well as interferes with the tone() library, you can 
                             // always revert Timer2 back to normal by calling timer2.unsetup()
+
+#ifdef DEBUG_SETUP
+  Serial.begin(SERIAL_SPEED);
+  Serial.println(" ");
+  Serial.println("     Copyright (C) 2017 - Jim Lander (jamieFL)");  
+  Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
+  Serial.println("     it under the terms of the GNU General Public License.  For details, see http://www.gnu.org/licenses/");
+  Serial.println(" ");
+  unsigned long temp_time = timer2.get_count();
+  while((timer2.get_count() - temp_time) < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
+#endif                            
 
   
   // rx INPUT - Setup Interrupts on Pins 8-12
@@ -206,6 +230,29 @@ if (rxPulse[rxAux] < 1250) {          // MODE 1
   ServoArray[rtESC].writeMicroseconds(rtESCPulse);
   ServoArray[rtTV].writeMicroseconds(rtTVPulse);
   ServoArray[rtAil].writeMicroseconds(rtAilPulse);
+
+#ifdef DEBUG_RX
+  Serial.print("  RECEIVER - Thr: "); Serial.print(rxPulse[rxThr]);  // Pring rx INPUTS
+  Serial.print("  Ail:  "); Serial.print(rxPulse[rxAil]);
+  Serial.print("  Ele:  "); Serial.print(rxPulse[rxEle]);
+  Serial.print("  Rud:  "); Serial.print(rxPulse[rxRud]);
+  Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
+#endif
+
+#ifdef DEBUG_SERVO
+  Serial.print("  SERVOS   - ltAl: "); Serial.print(ltAilPulse);  // Print Servo OUTPUTS
+  Serial.print("  rtAl: "); Serial.print(rtAilPulse);
+  Serial.print("  ltTV: "); Serial.print(ltTVPulse);
+  Serial.print("  rtTV: "); Serial.print(rtTVPulse);
+  Serial.print("  lESC: "); Serial.print(ltESCPulse);
+  Serial.print("  rESC: "); Serial.print(rtESCPulse);
+#endif  
+
+#ifdef DEBUG_SETUP
+  Serial.println("");
+  unsigned long temp_time = timer2.get_count();
+  while((timer2.get_count() - temp_time)/1000 < LOOP_DELAY);   //Wait until LOOP_DELAY passes.
+#endif
 
 }
 
