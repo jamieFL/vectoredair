@@ -21,7 +21,6 @@
    PIN 7, Right Aileron Servo  <BR />
    
 # INCLUDED LIBRARIES
-Enable Interrupt        http://tiny.cc/EnableInterrupt<BR />
 eRCaGuy_Timer2_Counter  http://tiny.cc/eRCaGuy_Timer2_Counter<BR />
 Servos                  http://tiny.cc/arduino-servo<BR />
    
