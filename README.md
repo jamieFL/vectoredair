@@ -14,7 +14,7 @@
    
 # SERVO & ESC OUTPUTS
    Pin 2, Left Aileron Servo<BR />
-   Pin 3, Left Thrust Vectoring Servo<BR /r>
+   Pin 3, Left Thrust Vectoring Servo<BR />
    Pin 4, Left Electronic Speed Controller (ESC)<BR />
    Pin 5, Right Electonic Speed Controller (ESC)<BR />
    Pin 6, Right Thrust Vectoring Servo<BR />
