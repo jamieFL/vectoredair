@@ -1,11 +1,12 @@
 /**************************************************************************
 
-   RECEIVER INPUTS
-   Pin  8, PCINT0, Channel 1, Throttle
-   Pin  9, PCINT1, Channel 2, Aileron
-   Pin 10, PCINT2, Channel 3, Elevator
-   Pin 11, PCINT3, Channel 4, Rudder
-   Pin 12, PCINT4, Channel 5, Aux Channel
+    This sketch is is written for the Arduino Uno or Nano.  The Nano will 
+    be installed between an FrSky S6r stabilized receiver, and a flying 
+    wing's servos and ESCs. Its purpos is to perform advanced Elevon, 
+    Differential Thrust (DT), and Thrust Vectoring (TV) mixing.
+
+    For the newest version, visit:  https://github.com/jamieFL/vectoredair
+    For set-up instructions:        http://www.vectoredair.com
 
    SERVO & ESC OUTPUTS
    Pin 2, Left Aileron Servo
@@ -15,18 +16,31 @@
    Pin 6, Right Thrust Vectoring Servo
    PIN 7, Right Aileron Servo   
 
+   RECEIVER INPUTS
+   Pin  8, PCINT0, Channel 1, Throttle
+   Pin  9, PCINT1, Channel 2, Aileron
+   Pin 10, PCINT2, Channel 3, Elevator
+   Pin 11, PCINT3, Channel 4, Rudder
+   Pin 12, PCINT4, Channel 5, Aux Channel
+
+***************************************************************************
 
    INCLUDED LIBRARIES
    eRCaGuy_Timer2_Counter  http://tiny.cc/eRCaGuy_Timer2_Counter
 
-   Note that the Timer 2 Counter Library has a precision of 0.5us.  Each
-   micro has two counts.  To maximze precision, and minimize servo jitter, all 
-   calculations are done in counts, not micros.  That is why rx INPUTS 
-   seem to be doubled. Therefore, to calculate micros, you must divide 
-   the counter by two.  
+   Note that the Timer 2 Counter Library has a precision of 0.5us.  To 
+   maximze precision, and minimize servo jitter, all calculations are 
+   performed in 0.5us counts, not micros.  That is why rx INPUTS and
+   channel mixing calculations seem to be doubled.  To calculate micros, 
+   divide any count value two.
 
-    Micros = timer2.get_count()/2 which has a precision of 1us.
+   A servo needs a signal from about 1000us to 2000us where 1500us is
+   center.  1000us is equivalent to 2000 counts and 2000us is equivalent
+   to 4000 counts.  To convert counts to micros, divide by two.
+
     Counts = timer2.get_count() which has a precision of 0.5us.
+    Micros = timer2.get_count()/2 which has a precision of 1us.
+
 
 ***************************************************************************
 
@@ -35,7 +49,7 @@
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    any later version.
 
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -51,6 +65,7 @@
 #include <eRCaGuy_Timer2_Counter.h>
 
 // *****  Constants  *****
+//#define DEBUG                               // Enable for Debugging Purposes 
 //#define Serial_SPEED 115200                 // Comment Out For Use
 
 // Receiver Input
@@ -100,29 +115,6 @@ unsigned int rxPulse[RX_TOTAL_CHANNELS];    // Current Receiver Count
 // Servo Output
 unsigned int ltAilCount, ltTVCount, ltESCCount, rtESCCount, rtTVCount, rtAilCount;
 unsigned long ltAilTime, ltTVTime, ltESCTime, rtESCTime, rtTVTime, rtAilTime, tStart;
-float DTRate;
-
-/*
-// *****     Display Reciever Signals     *****                   Comment Out For Use
-// When this code is active, it will interfere with servo output.
-// Keep unneeded output commented
-void print_signals(){
-//  Serial.print(  "RECEIVER   -");
-//  Serial.print("  Thr: "); Serial.print(rxPulse[rxThr]);     // Print Receiver INPUTS
-  Serial.print("  Ail: "); Serial.print(rxPulse[rxAil]);
-//  Serial.print("  Ele: "); Serial.print(rxPulse[rxEle]);
-//  Serial.print("  Rud: "); Serial.print(rxPulse[rxRud]);
-//  Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
-//  Serial.print("      SERVOS   -");
-  Serial.print("  ltAl: "); Serial.print(ltAilCount);          // Print Servo OUTPUTS
-  Serial.print("  rtAl: "); Serial.print(rtAilCount);
-//  Serial.print("      ltTV: "); Serial.print(ltTVCount);
-//  Serial.print("  rtTV: "); Serial.print(rtTVCount);
-//  Serial.print("      lESC: "); Serial.print(ltESCCount);
-//  Serial.print("  rESC: "); Serial.print(rtESCCount);  
-  Serial.println("");
-}
-*/
 
 // *****     Channel Mixing     *****
 double reverse(double val) {                                 //  2000 - 4000 becomes 4000 - 2000
@@ -135,13 +127,11 @@ double add(double val1, double val2) {                       // Combines Two Cha
 }
 
 void mixElevon(void) {                                       // Elevon Mixing of Aileron & Elevator Channels
-  double tmpval = add(rxPulse[rxAil], rxPulse[rxEle]);
-  ltAilCount = constrain(tmpval, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
-  tmpval = add(rxPulse[rxAil], reverse(rxPulse[rxEle]));  
-  rtAilCount = constrain(tmpval, RX_ENDPOINT_LOW, RX_ENDPOINT_HIGH);
+  ltAilCount = add(rxPulse[rxAil], rxPulse[rxEle]);
+  rtAilCount = add(rxPulse[rxAil], reverse(rxPulse[rxEle]));
 }
 
-void mixThrottle(void) {                                     // Differential Thrust Calculations
+void mixThrottle(float DTRate) {                             // Differential Thrust Calculations
   float yaw_pct, thr_pct;
   double upMod, dwnMod;
   uint32_t ltESCTmp, rtESCTmp;
@@ -171,16 +161,43 @@ void mixThrottle(void) {                                     // Differential Thr
   }
 }
 
+void mixChannels(unsigned int Mode) {
+  
+    mixElevon();                                               // Elevon Mixing: ON
+  if (Mode < 2500) {                                         // MODE 1
+    rtTVCount = 3000;                                        // Thrust Vecoting: OFF
+    ltTVCount = 3000;
+    rtESCCount = rxPulse[rxThr];                             // Differential Thrust: OFF
+    ltESCCount = rxPulse[rxThr];
+  }
+  else if (Mode > 3500) {                                    // MODE 3
+    rtTVCount = rtAilCount;                                  // Thrust Vectoring: ON
+    ltTVCount = ltAilCount;
+    mixThrottle(dtHighRate);                                 // Differential Thrust: ON at HIGHT Rate
+  }
+  else {                                                     // MODE 2
+    rtTVCount = 3000;                                        // Thrust Vectoring: OFF
+    ltTVCount = 3000;
+    mixThrottle(dtLowRate);                                  // Differential Thrust: ON at LOW Rate
+  }
+}
+
 //  *****     Setup Routine     *****
 void setup(){
 
-//  Serial.begin(Serial_SPEED);                                // Comment Out For Use
-
-  timer2.setup();                                            // Initialize the timer 2 library
-  tStart = timer2.get_count();                               // Initialize Loop Timer
+  #ifdef DEBUG
+    Serial.begin(Serial_SPEED);
+    Serial.flush();
+    Serial.println(" ");
+    Serial.println("     Copyright (C) 2017 - Jim Lander (jamieFL)");  
+    Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
+    Serial.println("     it under the terms of the GNU General Public License.  For details, see http://www.gnu.org/licenses/");
+    Serial.println(" ");
+    delay(4000)                                              // Pause 4 Seconds
+  #endif
 
   // disable timer0 overflow interrupt
-  TIMSK0 &= ~_BV(TOIE0);
+  TIMSK0 &= ~_BV(TOIE0);                                     //  Delay() and other standard timer functions are now disabled
 
   // Configure Servo Output Pins 2-7
   DDRD |= B11111100;
@@ -193,33 +210,37 @@ void setup(){
   PCMSK0 |= (1 << PCINT3);
   PCMSK0 |= (1 << PCINT4);  
 
+  timer2.setup();                                            // Initialize the timer 2 library
+  tStart = timer2.get_count();                               // Initialize Loop Timer
+
 }
 
 //  *****     Main Loop     *****
 void loop(){
   static unsigned long tTime;
 
-  mixElevon();                                               // Elevon Mixing: ON
-  if (rxPulse[rxAux] < 2500) {                               // MODE 1
-    rtTVCount = 3000;                                        // Thrust Vecoting: OFF
-    ltTVCount = 3000;
-    rtESCCount = rxPulse[rxThr];                             // Differential Thrust: OFF
-    ltESCCount = rxPulse[rxThr];
-  }
-  else if (rxPulse[rxAux] > 3500) {                          // MODE 3
-    rtTVCount = rtAilCount;                                  // Thrust Vectoring: ON
-    ltTVCount = ltAilCount;
-    DTRate = dtHighRate;                                     // Differential Thrust: ON at HIGHT Rate
-    mixThrottle();
-  }
-  else {                                                     // MODE 2
-    rtTVCount = 3000;                                        // Thrust Vectoring: OFF
-    ltTVCount = 3000;
-    DTRate = dtLowRate;                                      // Differential Thrust: ON at LOW Rate
-    mixThrottle();
-  }
+  // Servo Mixing
+  mixChannels(rxPulse[rxAux]);                               // Perform Elevon, Thrust Vectoring, Differential Thrust Mixing
 
-//  print_signals();                                           // Comment Out For Use
+  // *****     Display Receiver INPUT and Servo OUTPUT     *****
+  // When this code is active, it will interfere with servo movement.
+  // Enable only the output you need for debugging.
+  #ifdef DEBUG
+//    Serial.print(  "RECEIVER   -");
+//    Serial.print("  Thr: "); Serial.print(rxPulse[rxThr]);     // Print Receiver INPUTS
+    Serial.print("  Ail: "); Serial.print(rxPulse[rxAil]);
+//    Serial.print("  Ele: "); Serial.print(rxPulse[rxEle]);
+//    Serial.print("  Rud: "); Serial.print(rxPulse[rxRud]);
+//    Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
+//    Serial.print("      SERVOS   -");
+    Serial.print("  ltAl: "); Serial.print(ltAilCount);          // Print Servo OUTPUTS
+    Serial.print("  rtAl: "); Serial.print(rtAilCount);
+//    Serial.print("      ltTV: "); Serial.print(ltTVCount);
+//    Serial.print("  rtTV: "); Serial.print(rtTVCount);
+//    Serial.print("      lESC: "); Serial.print(ltESCCount);
+//    Serial.print("  rESC: "); Serial.print(rtESCCount);  
+    Serial.println("");
+  #endif
 
   // Servo Output
   while(timer2.get_count() - tStart <= 8000);                // 8000 count equals 4000us
@@ -234,8 +255,11 @@ void loop(){
   rtTVTime  = rtTVCount  + tStart;
   rtAilTime = rtAilCount + tStart;
 
+  noInterrupts();
   while(PORTD >= 3){                                         // Exit Loop Until Digital Pins 8 to 11 Are LOW.
+    interrupts();
     tTime = timer2.get_count();                              // Store the Current Count.
+    noInterrupts();
     if(ltAilTime <= tTime) PORTD &= B11111011;
     if(ltTVTime  <= tTime) PORTD &= B11110111;
     if(ltESCTime <= tTime) PORTD &= B11101111;
@@ -243,6 +267,7 @@ void loop(){
     if(rtTVTime  <= tTime) PORTD &= B10111111;
     if(rtAilTime <= tTime) PORTD &= B01111111;
   }
+  interrupts();
 
 }
 
@@ -294,4 +319,5 @@ ISR(PCINT0_vect){
     rxPulse[rxAux] = (timer2.get_count() - rxTimer[rxAux]);
   }    
 }
+
 
