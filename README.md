@@ -22,7 +22,6 @@
    
 # INCLUDED LIBRARIES
 eRCaGuy_Timer2_Counter  http://tiny.cc/eRCaGuy_Timer2_Counter<BR />
-Servos                  http://tiny.cc/arduino-servo<BR />
    
     Copyright (C) 2017 - Jim Lander (jamieFL)
     
