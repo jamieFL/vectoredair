@@ -91,7 +91,9 @@
 
 // Servo Output
 #define SERVO_TOTAL_CHANNELS 6
-
+#define SERVO_PRECISION 8                   // Divide by 2 for us.
+#define OUTPUT_LOOP_TIMER 39990             // Used my Ossilloscope to Calculate This to
+                                            // match the frame width output by my receiver.
 #define ltAil 0
 #define ltTV  1
 #define ltESC 2
@@ -193,7 +195,7 @@ void setup(){
     Serial.println("     This program comes with ABSOLUTELY NO WARRANTY.  It is free software: you can redistribute it and/or modify ");
     Serial.println("     it under the terms of the GNU General Public License.  For details, see http://www.gnu.org/licenses/");
     Serial.println(" ");
-    delay(4000)                                              // Pause 4 Seconds
+//    delay(4000)                                              // Pause 4 Seconds
   #endif
 
   // disable timer0 overflow interrupt
@@ -219,47 +221,65 @@ void setup(){
 void loop(){
   static unsigned long tTime;
 
-  // Servo Mixing
+  // *****     Servo Mixing     *****
   mixChannels(rxPulse[rxAux]);                               // Perform Elevon, Thrust Vectoring, Differential Thrust Mixing
 
   // *****     Display Receiver INPUT and Servo OUTPUT     *****
   // When this code is active, it will interfere with servo movement.
   // Enable only the output you need for debugging.
   #ifdef DEBUG
-//    Serial.print(  "RECEIVER   -");
-//    Serial.print("  Thr: "); Serial.print(rxPulse[rxThr]);     // Print Receiver INPUTS
+    Serial.println("");
+//    Serial.print("  Thr: "); Serial.print(rxPulse[rxThr]);   // Print Receiver INPUTS
     Serial.print("  Ail: "); Serial.print(rxPulse[rxAil]);
 //    Serial.print("  Ele: "); Serial.print(rxPulse[rxEle]);
 //    Serial.print("  Rud: "); Serial.print(rxPulse[rxRud]);
 //    Serial.print("  Aux: "); Serial.print(rxPulse[rxAux]);
-//    Serial.print("      SERVOS   -");
-    Serial.print("  ltAl: "); Serial.print(ltAilCount);          // Print Servo OUTPUTS
+    Serial.print("    ltAl: "); Serial.print(ltAilCount);    // Print Servo OUTPUTS
     Serial.print("  rtAl: "); Serial.print(rtAilCount);
 //    Serial.print("      ltTV: "); Serial.print(ltTVCount);
 //    Serial.print("  rtTV: "); Serial.print(rtTVCount);
 //    Serial.print("      lESC: "); Serial.print(ltESCCount);
 //    Serial.print("  rESC: "); Serial.print(rtESCCount);  
-    Serial.println("");
   #endif
 
-  // Servo Output
-  while(timer2.get_count() - tStart <= 8000);                // 8000 count equals 4000us
+  // *****     Servo Output     *****
 
-  tStart += 8000;                                            // increment start count for next cycle
+  // This timer loops until 4000us have passed since the 
+  // beginning of the last servo output itteration.  It
+  // accounts for the time taken for servo mixing and 
+  //careful utilization of serial output.
+  while(timer2.get_count() - tStart <= OUTPUT_LOOP_TIMER){  
+    //    Serial.print(".");
+  }
+  tStart += OUTPUT_LOOP_TIMER;                               // increment start count for next itteration
 
-  PORTD |= B11111100;                                        // Set All Servo Output Pins to HIGH
-  ltAilTime = ltAilCount + tStart;                           // Calculate Count to Set Pins to LOW
-  ltTVTime  = ltTVCount  + tStart;
-  ltESCTime = ltESCCount + tStart; 
-  rtESCTime = rtESCCount + tStart;
-  rtTVTime  = rtTVCount  + tStart;
-  rtAilTime = rtAilCount + tStart;
+  // This portion of code begins Servo Output.  It first sets 
+  // all output pins to HIGH and then calcuates the time at 
+  // which each pin will be set back to LOW.  Up to this point 
+  // all calculation have been performed in Counts, which as 
+  // previously stated, have a precision of 0.5us.  Such 
+  //precision output to the servos may cause servo chatter because 
+  // the signal changes 1-2us per iteration.  In integer math, 
+  // by first dividing and then multiplying the count value by 
+  // SERVO_PRECISION, the servo output timer's precision is 
+  // reduced to SERVO_PRECISION/2 us.  I suggest a value of 4-8
+  // which will give output precision of +/-(2 to 4)us.
+  PORTD |= B11111100;
+  ltAilTime = ((ltAilCount / SERVO_PRECISION) * SERVO_PRECISION) + tStart;
+  ltTVTime  = ((ltTVCount  / SERVO_PRECISION) * SERVO_PRECISION) + tStart;
+  ltESCTime = ((ltESCCount / SERVO_PRECISION) * SERVO_PRECISION) + tStart; 
+  rtESCTime = ((rtESCCount / SERVO_PRECISION) * SERVO_PRECISION) + tStart;
+  rtTVTime  = ((rtTVCount  / SERVO_PRECISION) * SERVO_PRECISION) + tStart;
+  rtAilTime = ((rtAilCount / SERVO_PRECISION) * SERVO_PRECISION) + tStart;
 
-  noInterrupts();
-  while(PORTD >= 3){                                         // Exit Loop Until Digital Pins 8 to 11 Are LOW.
-    interrupts();
-    tTime = timer2.get_count();                              // Store the Current Count.
-    noInterrupts();
+  // This portion of code loops until all servo output pins
+  // have been set back to LOW.
+//  noInterrupts();
+  while(PORTD >= 3){
+//    interrupts();
+    tTime = timer2.get_count();
+//    Serial.print("+");
+//    noInterrupts();
     if(ltAilTime <= tTime) PORTD &= B11111011;
     if(ltTVTime  <= tTime) PORTD &= B11110111;
     if(ltESCTime <= tTime) PORTD &= B11101111;
@@ -267,11 +287,13 @@ void loop(){
     if(rtTVTime  <= tTime) PORTD &= B10111111;
     if(rtAilTime <= tTime) PORTD &= B01111111;
   }
-  interrupts();
+//  interrupts();
 
 }
 
-// Interrupts Called When Receiver Input Pins Change State
+// *****     Interrupts     ***** 
+
+// Interrupts For When Receiver Input Pins Change State
 ISR(PCINT0_vect){
   // Throttle Interrupt
   if(rxLast[rxThr] == 0 && PINB & B00000001 ){               // Input Signal Changed
